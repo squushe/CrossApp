@@ -1,0 +1,12 @@
+[
+  {
+    "Id": "P-J01",
+    "Name": "Планшет Apple iPad Air",
+    "Price": 599.99
+  },
+  {
+    "Id": "P-J02",
+    "Name": "Стилус Apple Pencil 2",
+    "Price": 129.00
+  }
+]

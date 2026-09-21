@@ -1,0 +1,10 @@
+type;id;name;price_or_email;phone
+P;P-001;Ноутбук Dell XPS 15;1450.50
+P;P-002;Мишка Logitech MX Master 3;99.99
+C;C-001;Іван Іваненко;ivan@example.com;0991234567
+C;C-002;Марія Петренко;maria@example.com;
+P;P-003;Клавіатура Keychron K2;85.00
+P;P-011;Неправильний рядок
+P;P-012;Товар з текстом замість ціни;дорого
+P;P-013;;50.00
+X;X-001;Невідомий тип;0
