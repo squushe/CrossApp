@@ -1,47 +1,37 @@
-using Core.Dto;
-using Core.Import;
+using Core.Domain;
 
-string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
+Console.WriteLine("=== Сценарій 1: успіх ===");
+Order order = Order.Create("O-100", "C-001");
+order.AddLine("P-001", "Ноутбук Dell XPS 15", 1450.50m, 1);
+order.AddLine("P-002", "Мишка Logitech MX Master 3", 99.99m, 2);
+Console.WriteLine(order);
 
-if (!File.Exists(path))
+order.Confirm();
+Console.WriteLine(order);
+
+Console.WriteLine();
+Console.WriteLine("=== Сценарій 2: порушення інваріантів ===");
+
+TryDo("додавання рядка до підтвердженого замовлення", () => order.AddLine("P-003", "Килимок", 15.50m, 1));
+TryDo("підтвердження вже підтвердженого замовлення", () => order.Confirm());
+TryDo("скасування підтвердженого замовлення", () => order.Cancel());
+TryDo("порожній ID замовлення", () => Order.Create("   ", "C-002"));
+TryDo("від'ємна ціна товару", () => OrderLine.Create("P-004", "Тест", -50.00m, 1));
+TryDo("від'ємна кількість товару", () => OrderLine.Create("P-005", "Тест", 50.00m, -1));
+TryDo("підтвердження порожнього замовлення", () => {
+    var emptyOrder = Order.Create("O-101", "C-002");
+    emptyOrder.Confirm();
+});
+
+static void TryDo(string title, Action action)
 {
-    Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
-    return 1;
-}
-
-string extension = Path.GetExtension(path).ToLowerInvariant();
-
-ImportResult<DomainRecord> result = extension switch
-{
-    ".csv" => ProductCsvImporter.Load(path),
-    ".json" => ProductJsonImporter.Load(path),
-    _ => new ImportResult<DomainRecord>(new List<DomainRecord>(), new List<string> { $"Непідтримуваний формат файлу: {extension}" })
-};
-
-int total = result.Items.Count + result.Errors.Count;
-int accepted = result.Items.Count;
-int skipped = result.Errors.Count;
-double percentError = total == 0 ? 0 : (skipped * 100.0 / total);
-
-Console.WriteLine($"Статистика імпорту: усього {total} / прийнято {accepted} / пропущено {skipped} / помилок {percentError:F1}%");
-
-Console.WriteLine("\nПерші завантажені записи:");
-foreach (DomainRecord item in result.Items.Take(5))
-{
-    string print = item switch
+    try
     {
-        ProductDto p => $"[Товар]   {p.Id,-6} {p.Name,-30} {p.Price,8:F2}",
-        CustomerDto c => $"[Клієнт]  {c.Id,-6} {c.Name,-30} {c.Email}",
-        _ => item.ToString()!
-    };
-    Console.WriteLine($" {print}");
+        action();
+        Console.WriteLine($" {title}: виняток НЕ спрацював — інваріант відсутній!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" {title}: {ex.GetType().Name} — {ex.Message}");
+    }
 }
-
-if (result.Errors.Count > 0)
-{
-    Console.WriteLine($"\nПропущено рядків: {result.Errors.Count}");
-    foreach (string e in result.Errors)
-        Console.WriteLine($" ! {e}");
-}
-
-return 0;
