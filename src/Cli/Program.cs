@@ -1,55 +1,52 @@
 using Core;
+using Core.Abstractions;
 using Core.Domain;
-using Core.Dto;
 using Core.Services;
+using Core.Storage;
 
-Console.WriteLine("=== Сценарій 1: успіх ===");
-Order order = Order.Create("O-100", "C-001");
-order.AddLine("P-001", "Ноутбук Dell XPS 15", 1450.50m, 1);
-order.AddLine("P-002", "Мишка Logitech MX Master 3", 99.99m, 2);
-Console.WriteLine(order);
-order.Confirm();
-Console.WriteLine(order);
+bool useFile = args.Contains("--file");
+string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
 
-Console.WriteLine("\n=== Сценарій 2: порушення інваріантів ===");
-TryDo("додавання рядка до підтвердженого замовлення", () => order.AddLine("P-003", "Килимок", 15.50m, 1));
-TryDo("скасування підтвердженого замовлення", () => order.Cancel());
-TryDo("від'ємна ціна товару", () => OrderLine.Create("P-004", "Тест", -50.00m, 1));
+IOrderStore store = useFile
+    ? new FileOrderStore(dataPath)
+    : new InMemoryOrderStore(SampleData.Orders());
 
-Console.WriteLine("\n=== Сценарій 3: Додаткове завдання (Сервіс) ===");
-var existingOrders = new List<Order>
+var service = new OrderService(store);
+
+Console.WriteLine($"Сховище: {store.GetType().Name}");
+
+var created = service.CreateOrder("CUST-999");
+service.AddLine(created.Id, "P-101", "Кабель UTP cat6", 25.50m, 10);
+service.Confirm(created.Id);
+
+Console.WriteLine("\nСписок усіх замовлень:");
+foreach (var p in service.All())
 {
-    Order.Create("O-201", "C-999"),
-    Order.Create("O-202", "C-999"),
-    Order.Create("O-203", "C-999")
-};
-TryDo("перевищення ліміту відкритих замовлень", () => OrderService.CreateOrderForCustomer("C-999", existingOrders));
-
-Console.WriteLine("\n=== Сценарій 4: Додаткове завдання (Import Mapper) ===");
-var fakeDto = new OrderDto("O-300", "C-777", new List<OrderLineDto>
-{
-    new("P-001", "Поганий Товар", -10m, 1)
-}, "Draft");
-
-var importResult = new ImportResult<DomainRecord>(new List<DomainRecord> { fakeDto }, new List<string>());
-var mappedResult = ImportMapper.MapOrders(importResult);
-
-Console.WriteLine($"Успішно відновлено сутностей: {mappedResult.ValidOrders.Count}");
-Console.WriteLine($"Помилок при відновленні: {mappedResult.Errors.Count}");
-foreach (var error in mappedResult.Errors)
-{
-    Console.WriteLine($" ! {error}");
+    Console.WriteLine($" {p.Id,-10} {p.CustomerId,-10} {p.Status,-10} {p.Total,8:F2} грн ({p.Lines.Count} поз.)");
 }
 
-static void TryDo(string title, Action action)
+Console.WriteLine("\nПошук замовлення:");
+var found = service.Find(created.Id);
+if (found is not null)
 {
-    try
-    {
-        action();
-        Console.WriteLine($" {title}: виняток НЕ спрацював!");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($" {title}: {ex.GetType().Name} — {ex.Message}");
-    }
+    Console.WriteLine($" Знайдено: {found.Id}, Клієнт: {found.CustomerId}, Сума: {found.Total:F2} грн, Статус: {found.Status}");
+}
+
+Console.WriteLine("\nСценарії помилок:");
+try
+{
+    service.AddLine("non-existent-id", "P-999", "Тестовий товар", 10.00m, 1);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($" Помилка (неіснуючий id): {ex.Message}");
+}
+
+try
+{
+    store.Add(created);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($" Помилка (дублікат id): {ex.Message}");
 }
