@@ -45,6 +45,12 @@ public sealed class FileOrderStore(string path) : IOrderStore
         return _cache.GetValueOrDefault(id);
     }
 
+    public IReadOnlyList<Order> Find(Func<Order, bool> predicate)
+    {
+        EnsureLoaded();
+        return _cache.Values.Where(predicate).ToList();
+    }
+
     public void Add(Order item)
     {
         ArgumentNullException.ThrowIfNull(item);

@@ -12,6 +12,8 @@ public sealed class InMemoryOrderStore(IEnumerable<Order>? seed = null) : IOrder
 
     public Order? GetById(string id) => _items.GetValueOrDefault(id);
 
+    public IReadOnlyList<Order> Find(Func<Order, bool> predicate) => _items.Values.Where(predicate).ToList();
+
     public void Update(Order item) => _items[item.Id] = item;
 
     public bool Remove(string id) => _items.Remove(id);
