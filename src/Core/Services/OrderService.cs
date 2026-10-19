@@ -4,14 +4,19 @@ using Core.Abstractions;
 using Core.Domain;
 using Core.Events;
 
-public sealed class OrderService(IOrderStore store)
+public sealed class OrderService(IOrderStore store, INotificationSink? sink = null)
 {
     private readonly IOrderStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly INotificationSink? _sink = sink;
 
     public event EventHandler<OrderChangedEventArgs>? Changed;
 
-    private void OnChanged(Order order, OrderChangeKind kind) =>
-        Changed?.Invoke(this, new OrderChangedEventArgs(order.Id, kind, order.Lines.Count, order.Total));
+    private void OnChanged(Order order, OrderChangeKind kind)
+    {
+        var args = new OrderChangedEventArgs(order.Id, kind, order.Lines.Count, order.Total);
+        Changed?.Invoke(this, args);
+        _sink?.Notify(args);
+    }
 
     public Order CreateOrder(string customerId)
     {

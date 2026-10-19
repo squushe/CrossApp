@@ -1,13 +1,13 @@
+namespace Core.Import;
+
 using System.Globalization;
 using Core.Dto;
-
-namespace Core.Import;
 
 public static class ProductCsvImporter
 {
     private const char Separator = ';';
 
-    public static ImportResult<DomainRecord> Load(string path)
+    public static ImportResult<DomainRecord> Load(string path, Action<string>? onSkippedLine = null)
     {
         var items = new List<DomainRecord>();
         var errors = new List<string>();
@@ -31,7 +31,9 @@ public static class ProductCsvImporter
                     items.Add(ok.Value);
                     break;
                 case ParseFailed failed:
-                    errors.Add($"рядок {number}: {failed.Reason}");
+                    var message = $"рядок {number}: {failed.Reason}";
+                    errors.Add(message);
+                    onSkippedLine?.Invoke(message);
                     break;
             }
         }

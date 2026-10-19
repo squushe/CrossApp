@@ -1,5 +1,7 @@
+using Cli.Sinks;
 using Core.Abstractions;
 using Core.Events;
+using Core.Import;
 using Core.Services;
 using Core.Storage;
 
@@ -48,4 +50,20 @@ Console.WriteLine($"Знайдено замовлень на суму > 200 гр
 foreach (var o in expensiveOrders)
 {
     Console.WriteLine($" - {o.Id} (Клієнт {o.CustomerId}): {o.Total:F2} грн ({o.Status})");
+}
+
+Console.WriteLine("\n=== Додаткове завдання 1: Ручний DI з INotificationSink (ConsoleSink) ===");
+var consoleSinkService = new OrderService(store, new ConsoleSink());
+var sinkOrder = consoleSinkService.CreateOrder("CUST-SINK");
+consoleSinkService.AddLine(sinkOrder.Id, "P-103", "Патч-корд 1м", 45.00m, 2);
+
+Console.WriteLine("\n=== Додаткове завдання 2: Action<string> для звіту про пропущені рядки ===");
+string sampleCsvPath = Path.Combine(AppContext.BaseDirectory, "data", "sample.csv");
+if (!File.Exists(sampleCsvPath))
+{
+    sampleCsvPath = "data/sample.csv";
+}
+if (File.Exists(sampleCsvPath))
+{
+    ProductCsvImporter.Load(sampleCsvPath, skipped => Console.WriteLine($" [Звіт пропущеного рядка]: {skipped}"));
 }
