@@ -1,9 +1,26 @@
 namespace Core;
 
 using Core.Domain;
+using Core.Dto;
 
 public static class SampleData
 {
+    public static IReadOnlyList<CustomerDto> Customers() =>
+        Enumerable.Range(1, 13)
+            .Select(i => new CustomerDto($"CUST-{i:000}", $"Клієнт {i:00}", $"customer{i}@example.com"))
+            .ToList();
+
+    public static IReadOnlyList<Order> GenerateOrders(int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        return Enumerable.Range(1, count).Select(i =>
+        {
+            var order = Order.Create($"BENCH-{i:000000}", $"CUST-{i % 1000:000}");
+            order.AddLine("P-BENCH", "Тестовий товар", i % 500 + 1m, i % 5 + 1);
+            return order;
+        }).ToList();
+    }
+
     public static IReadOnlyList<Order> Orders()
     {
         var orders = new List<Order>();
