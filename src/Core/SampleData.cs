@@ -31,6 +31,7 @@ public static class SampleData
 
         var o5 = Order.Create("ORD-005", "CUST-004");
         o5.AddLine("P-005", "Навушники Sony WH-1000XM4", 298.00m, 1);
+        o5.Cancel();
         orders.Add(o5);
 
         var o6 = Order.Create("ORD-006", "CUST-002");
@@ -70,6 +71,7 @@ public static class SampleData
 
         var o13 = Order.Create("ORD-013", "CUST-009");
         o13.AddLine("P-005", "Навушники Sony WH-1000XM4", 298.00m, 2);
+        o13.Cancel();
         orders.Add(o13);
 
         var o14 = Order.Create("ORD-014", "CUST-010");
@@ -88,6 +90,15 @@ public static class SampleData
         o16.AddLine("P-002", "Мишка Logitech MX Master 3", 99.99m, 1);
         o16.AddLine("P-003", "Клавіатура Keychron K2", 85.00m, 1);
         orders.Add(o16);
+
+        var o17 = Order.Create("ORD-017", "CUST-011");
+        o17.AddLine("P-011", "Кабель USB", 25m, 2);
+        orders.Add(o17);
+
+        var o18 = Order.Create("ORD-018", "CUST-012");
+        o18.AddLine("P-012", "Адаптер USB", 50m, 1);
+        o18.Confirm();
+        orders.Add(o18);
 
         return orders;
     }
