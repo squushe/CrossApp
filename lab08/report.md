@@ -1,7 +1,7 @@
 # Лабораторна робота 8
 
 Тема: async/await, скасування, доменні винятки, unit-тести Core.
-Предметна область: замовлення. Виконано основне завдання.
+Предметна область: замовлення. Виконано основне та всі чотири додаткові завдання.
 
 ## 1. Асинхронні операції
 
@@ -45,7 +45,7 @@ try
 
 ## 3. Тести
 
-Проєкт `tests/Core.Tests` використовує xUnit, має посилання тільки на Core. `TestData` містить власні дані; `SampleData` і каталог `data/` у тестах не використовуються. Кожен тест створює нове сховище. Єдиний тест файлової інтеграції створює унікальний тимчасовий файл і видаляє його в `finally`.
+Проєкт `tests/Core.Tests` використовує xUnit, має посилання тільки на Core. `TestData` містить власні дані; `SampleData` і каталог `data/` у тестах не використовуються. Кожен тест створює нове сховище. Два тести файлової інтеграції створюють унікальні тимчасові файли й видаляють їх у `finally`.
 
 | Назва тесту | Що перевіряє | Очікуваний результат |
 |---|---|---|
@@ -63,7 +63,7 @@ try
 | ImportAsync_ToConfirmedOrder_RejectsRowWithoutEvent | Бізнес-помилка під час імпорту | DomainException з номером запису, немає нових рядків і подій |
 | LoadAsync_WithInvalidRecord_ReportsNumberAndPreservesInnerException | Поганий другий запис у тимчасовому файлі | DomainException «Запис 2», InnerException, незмінне замовлення |
 
-Разом: 13 тестових методів, 16 сценаріїв з урахуванням `InlineData`.
+Основне завдання: 13 тестових методів, 16 сценаріїв з урахуванням `InlineData`. Разом із додатковими завданнями: 21 метод, 25 сценаріїв.
 
 ## 4. Результати перевірки
 
@@ -71,12 +71,13 @@ try
 
 ```text
 dotnet test
-Passed!  - Failed: 0, Passed: 16, Skipped: 0, Total: 16
+Passed!  - Failed: 0, Passed: 25, Skipped: 0, Total: 25
 
 dotnet run --project src/Cli -f net10.0 -- import-lines
 Імпортовано рядків: 3
 
 dotnet run --project src/Cli -f net10.0 -- import-lines --cancel-after-ms 0
+Джерело скасування: таймаут.
 Імпорт скасовано.
 
 dotnet run --project src/Cli -f net10.0 -- import-lines data/order-lines-invalid.json
@@ -94,8 +95,74 @@ Actual value was -1.
 
 ## Демонстрація на захисті
 
-1. Запустити `dotnet test` і показати 16 успішних сценаріїв.
+1. Запустити `dotnet test` і показати 25 успішних сценаріїв.
 2. Відкрити `src/Core/Import/JsonOrderLineImporter.cs`: показати `await`, `useAsync: true`, перевірку токена й номер запису в помилці.
 3. Показати передавання токена з `src/Cli/Program.cs` через `src/Core/Services/OrderService.cs` до імпортера.
 4. Запустити звичайний імпорт, скасування через `--cancel-after-ms 0`, імпорт `data/order-lines-invalid.json`.
 5. Відкрити `AddLine_UpdatesTotalAndRaisesChangedExactlyOnce`: подія перехоплюється списком у пам'яті, консоль і диск не потрібні.
+
+
+## 6. Додаткові завдання
+
+### 6.1. Потоковий імпорт
+
+`IStreamingOrderLineImporter.ReadAsync` повертає `IAsyncEnumerable<ImportedOrderLine>`. Реалізація читає масив через `JsonSerializer.DeserializeAsyncEnumerable`, перетворює кожен DTO і повертає `yield return`. На параметрі токена стоїть `[EnumeratorCancellation]`: завдяки цьому токен, переданий через `.WithCancellation(ct)`, також враховується ітератором.
+
+`OrderService.ImportStreamingAsync` застосовує кожен отриманий рядок відразу через `await foreach`. Масив вхідних DTO не матеріалізується. Самі додані рядки замовлень залишаються в пам'яті сховища. При пізнішій помилці або скасуванні попередні успішні зміни залишаються; транзакційного відкочування немає. Звичайний `ImportAsync` зберігає попередню перевірку всього файлу.
+
+```sh
+dotnet run --project src/Cli -f net10.0 -- import-lines --stream --progress
+```
+
+### 6.2. Зв'язані токени
+
+```csharp
+using var userCts = new CancellationTokenSource();
+using var timeoutCts = new CancellationTokenSource();
+// Ctrl+C викликає userCts.Cancel(), таймер - timeoutCts.CancelAfter(...).
+using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+    userCts.Token, timeoutCts.Token);
+```
+
+Обом режимам імпорту передається `linkedCts.Token`. Після `OperationCanceledException` Cli перевіряє початкові джерела і показує `Джерело скасування: таймаут.` або `Джерело скасування: Ctrl+C.`. Якщо обидва джерела вже скасовані, повідомлення про Ctrl+C має пріоритет.
+
+Тест `ImportAsync_WithLinkedTokens_IsCancelledByTimeoutAndNotUser` чекає через `TaskCompletionSource`, поки імпортер почне очікувати, потім викликає `timeoutCts.CancelAfter(20 мс)`. Перевіряються скасований таймаут, скасований зв'язаний токен, нескасований користувацький токен і токен у винятку. Захисний `WaitAsync(5 с)` не дає тесту зависнути та не маскує неспрацювання таймера: тоді тест впаде з `TimeoutException`.
+
+### 6.3. IProgress<int>
+
+Обидва методи сервісу приймають `IProgress<int>? progress`. Звичайний імпорт повідомляє відсоток опрацьованих записів, а потоковий - приблизну частку прочитаних байтів. Через випереджувальну буферизацію JSON на малих файлах можливий стрибок 0 → 99. Порожній успішний імпорт дає 0 → 100. Після помилки або скасування 100 не повідомляється.
+
+`ConsoleImportProgress` реалізує `IProgress<int>` синхронно, щоб повідомлення не губилися після завершення консольної програми. Повторні значення відсіюються; останній успішний відсоток - 100.
+
+```text
+dotnet run --project src/Cli -f net10.0 -- import-lines --stream --progress
+Прогрес імпорту: 0%
+Прогрес імпорту: 99%
+Прогрес імпорту: 100%
+Імпортовано рядків: 3
+```
+
+### 6.4. Покриття
+
+```sh
+dotnet test --collect:"XPlat Code Coverage"
+```
+
+Всі 25 сценаріїв пройшли. Покриття рядків Core: **28.93%** (193/667); покриття розгалужень: **27.55%**. Детальний збережений підсумок: [coverage-summary.md](coverage-summary.md).
+
+Непокритими залишилися попередні імпортери товарів, файлове сховище, кеш і фабрика, демонстраційні дані, інформація про середовище, бенчмарк і частина звітів та доменних переходів. Це прийнятно для демонстрації конкретних вимог лабораторної: перевірено інваріанти, події, детермінований звіт, звичайний і потоковий імпорт, прогрес, скасування й таймаут. Для повної перевірки Core потрібне розширення тестів та окремі інтеграційні перевірки інфраструктури.
+
+### Нові тести
+
+| Назва | Перевірка |
+|---|---|
+| ReadAsync_WithEnumeratorCancellation_ThrowsBeforeOpeningFile | Токен лише в WithCancellation діє через EnumeratorCancellation |
+| ImportStreamingAsync_AppliesEachRowBeforeRequestingNextAndSkipsDuplicates | Рядок застосовується до отримання наступного; дублікати пропускаються; правильні подія й токен |
+| ImportStreamingAsync_WhenAlreadyCancelled_DoesNotOpenFile | Заздалегідь скасований потік не відкриває файл |
+| ImportStreamingAsync_WhenCancelledAfterFirstRow_DoesNotReportCompletion | Немає другого додавання та 100% після скасування |
+| ImportAsync_ReportsProcessedRowsIncludingSkippedDuplicates | Прогрес 0, 50, 100 з урахуванням пропущеного дубліката |
+| ImportStreamingAsync_WithInvalidSecondRecord_KeepsFirstAndDisposesStream | Номер поганого запису, збереження першого рядка, звільнення файлу, немає 100% |
+| ImportAsync_WithEmptySource_ReportsCompletion (Theory, 2 набори) | Порожній звичайний та потоковий імпорт дають 0 записів, прогрес 0 → 100 |
+| ImportAsync_WithLinkedTokens_IsCancelledByTimeoutAndNotUser | Скасування саме таймером без сигналу від користувача |
+
+Додатково вручну перевірено Ctrl+C і додатний таймаут на великому тимчасовому файлі в обох режимах імпорту. У кожному випадку CLI правильно визначив джерело скасування і завершився з кодом 2.

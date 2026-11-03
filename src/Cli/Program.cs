@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cli.Sinks;
 using Core;
 using Core.Import;
 using Core.Reports;
@@ -106,7 +107,7 @@ static async Task RunAsync(string[] args)
             Console.WriteLine($"У запиті після очищення джерела: {demo.AfterClear}");
             break;
         default:
-            Console.WriteLine("import-lines [path] [--cancel-after-ms N] [--file] | report-top | report-expensive | report-groups | report-sum | demo-deferred | report-customers | report-top-orders | report-groups-query | benchmark-reports");
+            Console.WriteLine("import-lines [path] [--stream] [--progress] [--cancel-after-ms N] [--file] | report-top | report-expensive | report-groups | report-sum | demo-deferred | report-customers | report-top-orders | report-groups-query | benchmark-reports");
             Environment.ExitCode = 1;
             break;
     }
@@ -119,7 +120,8 @@ static async Task ImportLinesAsync(OrderService service, string[] args)
     var path = commandIndex + 1 < args.Length && !args[commandIndex + 1].StartsWith("--")
         ? args[commandIndex + 1]
         : Path.Combine("data", "order-lines.json");
-    using var cts = new CancellationTokenSource();
+    using var userCts = new CancellationTokenSource();
+    using var timeoutCts = new CancellationTokenSource();
     var timeoutIndex = Array.IndexOf(args, "--cancel-after-ms");
     if (timeoutIndex >= 0)
     {
@@ -127,17 +129,28 @@ static async Task ImportLinesAsync(OrderService service, string[] args)
             !int.TryParse(args[timeoutIndex + 1], out var milliseconds) || milliseconds < 0)
             throw new ArgumentException("--cancel-after-ms потребує невід'ємного цілого числа.");
         if (milliseconds == 0)
-            cts.Cancel(); // Детермінована демонстрація скасування навіть на малому файлі.
+            timeoutCts.Cancel(); // Детермінована демонстрація скасування навіть на малому файлі.
         else
-            cts.CancelAfter(TimeSpan.FromMilliseconds(milliseconds));
+            timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(milliseconds));
     }
 
-    ConsoleCancelEventHandler handler = (_, e) => { e.Cancel = true; cts.Cancel(); };
+    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(userCts.Token, timeoutCts.Token);
+    IProgress<int>? progress = args.Contains("--progress") ? new ConsoleImportProgress() : null;
+    ConsoleCancelEventHandler handler = (_, e) => { e.Cancel = true; userCts.Cancel(); };
     Console.CancelKeyPress += handler;
     try
     {
-        var added = await service.ImportAsync(new JsonOrderLineImporter(), path, cts.Token);
+        var importer = new JsonOrderLineImporter();
+        var added = args.Contains("--stream")
+            ? await service.ImportStreamingAsync(importer, path, linkedCts.Token, progress)
+            : await service.ImportAsync(importer, path, linkedCts.Token, progress);
         Console.WriteLine($"Імпортовано рядків: {added}");
+    }
+    catch (OperationCanceledException) when (linkedCts.IsCancellationRequested)
+    {
+        Console.WriteLine(userCts.IsCancellationRequested
+            ? "Джерело скасування: Ctrl+C." : "Джерело скасування: таймаут.");
+        throw;
     }
     finally
     {
