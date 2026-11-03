@@ -1,65 +1,146 @@
+using System.Text.Json;
 using Core;
+using Core.Import;
 using Core.Reports;
 using Core.Services;
 using Core.Storage;
 
-var service = new OrderService(StoreFactory.Create(args));
-var items = service.All();
-var command = args.FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal)) ?? "report-top";
-
-switch (command)
+try
 {
-    case "report-top":
-        Console.WriteLine($"  {"Клієнт",-12} {"Замовлень",10} {"Сума, грн",14}");
-        foreach (var row in ReportService.TopCustomers(items, 5))
-            Console.WriteLine($"  {row.CustomerId,-12} {row.OrdersCount,10} {row.Total,14:F2}");
-        break;
-    case "report-customers":
-        Console.WriteLine($"  {"Клієнт",-12} {"Ім'я",-14} {"Замовлень",10} {"Сума, грн",14}");
-        foreach (var row in ReportService.ByCustomer(SampleData.Customers(), items))
-            Console.WriteLine($"  {row.CustomerId,-12} {row.Name,-14} {row.OrdersCount,10} {row.Total,14:F2}");
-        break;
-    case "report-top-orders":
-        Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {"Сума, грн",14}");
-        foreach (var row in ReportService.TopOrders(items, 5))
-            Console.WriteLine($"  {row.Id,-12} {row.CustomerId,-12} {row.Total,14:F2}");
-        break;
-    case "report-expensive":
-        Console.WriteLine("Замовлення дорожче 200 грн:");
-        Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {"Статус",-12} {"Рядків",7} {"Сума, грн",14}");
-        foreach (var row in ReportService.ExpensiveOrders(items, 200m))
-            Console.WriteLine($"  {row.Id,-12} {row.CustomerId,-12} {row.Status,-12} {row.LinesCount,7} {row.Total,14:F2}");
-        break;
-    case "report-groups":
-        Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {"Сума, грн",14}");
-        foreach (var row in ReportService.ByStatus(items))
-            Console.WriteLine($"  {row.Key,-12} {row.Count,10} {row.Total,14:F2}");
-        break;
-    case "report-groups-query":
-        Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {"Сума, грн",14}");
-        foreach (var row in ReportService.ByStatusQuery(items))
-            Console.WriteLine($"  {row.Key,-12} {row.Count,10} {row.Total,14:F2}");
-        break;
-    case "benchmark-reports":
-        var benchmark = ReportBenchmark.Run();
-        Console.WriteLine($"Записів: {benchmark.Records}, повторів: {benchmark.Iterations}, рядків звіту: {benchmark.ResultCount}");
-        Console.WriteLine($"Без проміжного ToList: {benchmark.WithoutIntermediateListMs:F3} мс (середнє)");
-        Console.WriteLine($"З проміжним ToList:   {benchmark.WithIntermediateListMs:F3} мс (середнє)");
-        Console.WriteLine($"Результати однакові: {benchmark.ResultsEqual}");
-        break;
-    case "report-sum":
-        var t = ReportService.Totals(items);
-        Console.WriteLine($"Замовлень: {t.Items}, сума: {t.Total:F2} грн, середній чек: {t.Average:F2} грн, максимум: {t.Max:F2} грн");
-        break;
-    case "demo-deferred":
-        var demo = ReportService.DemonstrateDeferredExecution(items);
-        Console.WriteLine($"Дорожчих за 200 грн до змін: {demo.Before}");
-        Console.WriteLine($"Дорожчих за 200 грн після додавання: {demo.After}");
-        Console.WriteLine($"У знімку після очищення джерела: {demo.SnapshotCount}");
-        Console.WriteLine($"У запиті після очищення джерела: {demo.AfterClear}");
-        break;
-    default:
-        Console.WriteLine("report-top | report-expensive | report-groups | report-sum | demo-deferred | report-customers | report-top-orders | report-groups-query | benchmark-reports");
-        Environment.ExitCode = 1;
-        break;
+    await RunAsync(args);
+}
+catch (OperationCanceledException)
+{
+    Console.WriteLine("Імпорт скасовано.");
+    Environment.ExitCode = 2;
+}
+catch (DomainException ex)
+{
+    Console.WriteLine($"Дані відхилено: {ex.Message}");
+    Environment.ExitCode = 1;
+}
+catch (FileNotFoundException ex)
+{
+    Console.WriteLine($"Файл не знайдено: {ex.FileName}");
+    Environment.ExitCode = 1;
+}
+catch (JsonException ex)
+{
+    Console.WriteLine($"Некоректний JSON: {ex.Message}");
+    Environment.ExitCode = 1;
+}
+catch (IOException ex)
+{
+    Console.WriteLine($"Помилка читання/запису файлу: {ex.Message}");
+    Environment.ExitCode = 1;
+}
+catch (UnauthorizedAccessException ex)
+{
+    Console.WriteLine($"Немає доступу до файлу: {ex.Message}");
+    Environment.ExitCode = 1;
+}
+catch (ArgumentException ex)
+{
+    Console.WriteLine($"Некоректні аргументи: {ex.Message}");
+    Environment.ExitCode = 1;
+}
+
+static async Task RunAsync(string[] args)
+{
+    var service = new OrderService(StoreFactory.Create(args));
+    var items = service.All();
+    var command = args.FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal)) ?? "report-top";
+
+    switch (command)
+    {
+        case "import-lines":
+            await ImportLinesAsync(service, args);
+            break;
+        case "report-top":
+            Console.WriteLine($"  {"Клієнт",-12} {"Замовлень",10} {"Сума, грн",14}");
+            foreach (var row in ReportService.TopCustomers(items, 5))
+                Console.WriteLine($"  {row.CustomerId,-12} {row.OrdersCount,10} {row.Total,14:F2}");
+            break;
+        case "report-customers":
+            Console.WriteLine($"  {"Клієнт",-12} {"Ім'я",-14} {"Замовлень",10} {"Сума, грн",14}");
+            foreach (var row in ReportService.ByCustomer(SampleData.Customers(), items))
+                Console.WriteLine($"  {row.CustomerId,-12} {row.Name,-14} {row.OrdersCount,10} {row.Total,14:F2}");
+            break;
+        case "report-top-orders":
+            Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {"Сума, грн",14}");
+            foreach (var row in ReportService.TopOrders(items, 5))
+                Console.WriteLine($"  {row.Id,-12} {row.CustomerId,-12} {row.Total,14:F2}");
+            break;
+        case "report-expensive":
+            Console.WriteLine("Замовлення дорожче 200 грн:");
+            Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {"Статус",-12} {"Рядків",7} {"Сума, грн",14}");
+            foreach (var row in ReportService.ExpensiveOrders(items, 200m))
+                Console.WriteLine($"  {row.Id,-12} {row.CustomerId,-12} {row.Status,-12} {row.LinesCount,7} {row.Total,14:F2}");
+            break;
+        case "report-groups":
+            Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {"Сума, грн",14}");
+            foreach (var row in ReportService.ByStatus(items))
+                Console.WriteLine($"  {row.Key,-12} {row.Count,10} {row.Total,14:F2}");
+            break;
+        case "report-groups-query":
+            Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {"Сума, грн",14}");
+            foreach (var row in ReportService.ByStatusQuery(items))
+                Console.WriteLine($"  {row.Key,-12} {row.Count,10} {row.Total,14:F2}");
+            break;
+        case "benchmark-reports":
+            var benchmark = ReportBenchmark.Run();
+            Console.WriteLine($"Записів: {benchmark.Records}, повторів: {benchmark.Iterations}, рядків звіту: {benchmark.ResultCount}");
+            Console.WriteLine($"Без проміжного ToList: {benchmark.WithoutIntermediateListMs:F3} мс (середнє)");
+            Console.WriteLine($"З проміжним ToList:   {benchmark.WithIntermediateListMs:F3} мс (середнє)");
+            Console.WriteLine($"Результати однакові: {benchmark.ResultsEqual}");
+            break;
+        case "report-sum":
+            var t = ReportService.Totals(items);
+            Console.WriteLine($"Замовлень: {t.Items}, сума: {t.Total:F2} грн, середній чек: {t.Average:F2} грн, максимум: {t.Max:F2} грн");
+            break;
+        case "demo-deferred":
+            var demo = ReportService.DemonstrateDeferredExecution(items);
+            Console.WriteLine($"Дорожчих за 200 грн до змін: {demo.Before}");
+            Console.WriteLine($"Дорожчих за 200 грн після додавання: {demo.After}");
+            Console.WriteLine($"У знімку після очищення джерела: {demo.SnapshotCount}");
+            Console.WriteLine($"У запиті після очищення джерела: {demo.AfterClear}");
+            break;
+        default:
+            Console.WriteLine("import-lines [path] [--cancel-after-ms N] [--file] | report-top | report-expensive | report-groups | report-sum | demo-deferred | report-customers | report-top-orders | report-groups-query | benchmark-reports");
+            Environment.ExitCode = 1;
+            break;
+    }
+}
+
+static async Task ImportLinesAsync(OrderService service, string[] args)
+{
+    // Шлях стоїть відразу після команди; параметри - після шляху.
+    var commandIndex = Array.IndexOf(args, "import-lines");
+    var path = commandIndex + 1 < args.Length && !args[commandIndex + 1].StartsWith("--")
+        ? args[commandIndex + 1]
+        : Path.Combine("data", "order-lines.json");
+    using var cts = new CancellationTokenSource();
+    var timeoutIndex = Array.IndexOf(args, "--cancel-after-ms");
+    if (timeoutIndex >= 0)
+    {
+        if (timeoutIndex + 1 >= args.Length ||
+            !int.TryParse(args[timeoutIndex + 1], out var milliseconds) || milliseconds < 0)
+            throw new ArgumentException("--cancel-after-ms потребує невід'ємного цілого числа.");
+        if (milliseconds == 0)
+            cts.Cancel(); // Детермінована демонстрація скасування навіть на малому файлі.
+        else
+            cts.CancelAfter(TimeSpan.FromMilliseconds(milliseconds));
+    }
+
+    ConsoleCancelEventHandler handler = (_, e) => { e.Cancel = true; cts.Cancel(); };
+    Console.CancelKeyPress += handler;
+    try
+    {
+        var added = await service.ImportAsync(new JsonOrderLineImporter(), path, cts.Token);
+        Console.WriteLine($"Імпортовано рядків: {added}");
+    }
+    finally
+    {
+        Console.CancelKeyPress -= handler;
+    }
 }

@@ -22,7 +22,7 @@ public sealed class InMemoryOrderStore(IEnumerable<Order>? seed = null) : IOrder
     {
         ArgumentNullException.ThrowIfNull(item);
         if (_items.ContainsKey(item.Id))
-            throw new InvalidOperationException($"Запис з id={item.Id} уже існує.");
+            throw new DomainException($"Запис з id={item.Id} уже існує.");
         _items.Add(item.Id, item);
     }
 }

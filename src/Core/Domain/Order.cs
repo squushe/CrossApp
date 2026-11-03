@@ -42,7 +42,7 @@ public sealed class Order
     public void AddLine(string productId, string name, decimal price, int quantity)
     {
         if (Status != OrderStatus.Draft)
-            throw new InvalidOperationException($"Замовлення {Id} має статус {Status}, рядки можна додавати лише в стані Draft");
+            throw new DomainException($"Замовлення {Id} має статус {Status}, рядки можна додавати лише в стані Draft");
 
         var line = OrderLine.Create(productId, name, price, quantity);
         _lines.Add(line);
@@ -51,14 +51,14 @@ public sealed class Order
     public void Confirm()
     {
         if (_lines.Count == 0)
-            throw new InvalidOperationException($"Неможливо підтвердити порожнє замовлення {Id}");
+            throw new DomainException($"Неможливо підтвердити порожнє замовлення {Id}");
             
         Status = Status switch
         {
             OrderStatus.Draft => OrderStatus.Confirmed,
-            OrderStatus.Confirmed => throw new InvalidOperationException($"Замовлення {Id} вже підтверджено"),
-            OrderStatus.Cancelled => throw new InvalidOperationException($"Не можна підтвердити скасоване замовлення {Id}"),
-            _ => throw new InvalidOperationException("Невідомий стан")
+            OrderStatus.Confirmed => throw new DomainException($"Замовлення {Id} вже підтверджено"),
+            OrderStatus.Cancelled => throw new DomainException($"Не можна підтвердити скасоване замовлення {Id}"),
+            _ => throw new DomainException("Невідомий стан")
         };
     }
     
@@ -67,9 +67,9 @@ public sealed class Order
         Status = Status switch
         {
             OrderStatus.Draft => OrderStatus.Cancelled,
-            OrderStatus.Confirmed => throw new InvalidOperationException($"Замовлення {Id} вже підтверджено, скасування неможливе"),
-            OrderStatus.Cancelled => throw new InvalidOperationException($"Замовлення {Id} вже скасоване"),
-            _ => throw new InvalidOperationException("Невідомий стан")
+            OrderStatus.Confirmed => throw new DomainException($"Замовлення {Id} вже підтверджено, скасування неможливе"),
+            OrderStatus.Cancelled => throw new DomainException($"Замовлення {Id} вже скасоване"),
+            _ => throw new DomainException("Невідомий стан")
         };
     }
 

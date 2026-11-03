@@ -1,0 +1,4 @@
+[
+  { "OrderId": "ORD-003", "ProductId": "P-IMPORT-1", "Name": "Кабель USB-C", "Price": 125.50, "Quantity": 2 },
+  { "OrderId": "ORD-003", "ProductId": "P-BAD", "Name": "Некоректний товар", "Price": 100, "Quantity": -1 }
+]
