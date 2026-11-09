@@ -1,13 +1,10 @@
 namespace Core.Storage;
 
-using System.Text.Json;
 using Core.Abstractions;
 using Core.Domain;
-using Core.Dto;
 
 public sealed class FileOrderStore(string path) : IOrderStore
 {
-    private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
     private readonly Dictionary<string, Order> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _path = Path.GetFullPath(path);
     private bool _loaded;
@@ -17,21 +14,14 @@ public sealed class FileOrderStore(string path) : IOrderStore
         if (_loaded) return;
         if (File.Exists(_path))
         {
-            var dtos = JsonSerializer.Deserialize<List<OrderDto>>(File.ReadAllText(_path)) ?? [];
-            foreach (var dto in dtos)
-            {
-                var p = Order.FromDto(dto);
-                _cache[p.Id] = p;
-            }
+            // Повна перевірка відбувається до зміни кешу.
+            var orders = OrderJsonFile.Read(_path);
+            foreach (var order in orders) _cache.Add(order.Id, order);
         }
         _loaded = true;
     }
 
-    private void Flush()
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        File.WriteAllText(_path, JsonSerializer.Serialize(_cache.Values.Select(p => p.ToDto()).ToList(), Options));
-    }
+    private void Flush() => OrderJsonFile.Write(_path, _cache.Values);
 
     public IReadOnlyList<Order> List()
     {

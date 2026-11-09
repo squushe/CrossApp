@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cli.Sinks;
+using Cli.Configuration;
 using Core;
 using Core.Import;
 using Core.Reports;
@@ -30,6 +31,11 @@ catch (JsonException ex)
     Console.WriteLine($"Некоректний JSON: {ex.Message}");
     Environment.ExitCode = 1;
 }
+catch (InvalidDataException ex)
+{
+    Console.WriteLine($"Некоректна конфігурація: {ex.Message}");
+    Environment.ExitCode = 1;
+}
 catch (IOException ex)
 {
     Console.WriteLine($"Помилка читання/запису файлу: {ex.Message}");
@@ -48,43 +54,61 @@ catch (ArgumentException ex)
 
 static async Task RunAsync(string[] args)
 {
-    var service = new OrderService(StoreFactory.Create(args));
+    var settings = CliConfiguration.Load(args);
+    settings.Describe();
+    var sumHeader = $"Сума, {settings.Options.Orders.Currency}";
+    var service = new OrderService(StoreFactory.Create(args, settings.DataFile));
     var items = service.All();
     var command = args.FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal)) ?? "report-top";
 
     switch (command)
     {
+        case "config":
+            break;
+        case "export":
+            OrderJsonFile.Write(settings.DataFile, items);
+            Console.WriteLine($"Експортовано {items.Count} замовлень.");
+            break;
+        case "import":
+            var index = Array.IndexOf(args, "import");
+            var source = index + 1 < args.Length && !args[index + 1].StartsWith("--")
+                ? Path.GetFullPath(args[index + 1], AppContext.BaseDirectory)
+                : settings.DataFile;
+            var imported = OrderJsonFile.Read(source);
+            OrderJsonFile.Write(settings.DataFile, imported);
+            Console.WriteLine($"Імпортовано {imported.Count} замовлень. Колекцію замінено повністю.");
+            break;
         case "import-lines":
             await ImportLinesAsync(service, args);
             break;
         case "report-top":
-            Console.WriteLine($"  {"Клієнт",-12} {"Замовлень",10} {"Сума, грн",14}");
+            Console.WriteLine($"  {"Клієнт",-12} {"Замовлень",10} {sumHeader,14}");
             foreach (var row in ReportService.TopCustomers(items, 5))
                 Console.WriteLine($"  {row.CustomerId,-12} {row.OrdersCount,10} {row.Total,14:F2}");
             break;
         case "report-customers":
-            Console.WriteLine($"  {"Клієнт",-12} {"Ім'я",-14} {"Замовлень",10} {"Сума, грн",14}");
+            Console.WriteLine($"  {"Клієнт",-12} {"Ім'я",-14} {"Замовлень",10} {sumHeader,14}");
             foreach (var row in ReportService.ByCustomer(SampleData.Customers(), items))
                 Console.WriteLine($"  {row.CustomerId,-12} {row.Name,-14} {row.OrdersCount,10} {row.Total,14:F2}");
             break;
         case "report-top-orders":
-            Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {"Сума, грн",14}");
+            Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {sumHeader,14}");
             foreach (var row in ReportService.TopOrders(items, 5))
                 Console.WriteLine($"  {row.Id,-12} {row.CustomerId,-12} {row.Total,14:F2}");
             break;
         case "report-expensive":
-            Console.WriteLine("Замовлення дорожче 200 грн:");
-            Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {"Статус",-12} {"Рядків",7} {"Сума, грн",14}");
+            Console.WriteLine($"Замовлення дорожче 200 {settings.Options.Orders.Currency}:");
+            Console.WriteLine($"  {"Замовлення",-12} {"Клієнт",-12} {"Статус",-12} {"Рядків",7} {sumHeader,14}");
             foreach (var row in ReportService.ExpensiveOrders(items, 200m))
                 Console.WriteLine($"  {row.Id,-12} {row.CustomerId,-12} {row.Status,-12} {row.LinesCount,7} {row.Total,14:F2}");
             break;
         case "report-groups":
-            Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {"Сума, грн",14}");
+            Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {sumHeader,14}");
             foreach (var row in ReportService.ByStatus(items))
                 Console.WriteLine($"  {row.Key,-12} {row.Count,10} {row.Total,14:F2}");
             break;
         case "report-groups-query":
-            Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {"Сума, грн",14}");
+            Console.WriteLine($"  {"Статус",-12} {"Замовлень",10} {sumHeader,14}");
             foreach (var row in ReportService.ByStatusQuery(items))
                 Console.WriteLine($"  {row.Key,-12} {row.Count,10} {row.Total,14:F2}");
             break;
@@ -97,7 +121,7 @@ static async Task RunAsync(string[] args)
             break;
         case "report-sum":
             var t = ReportService.Totals(items);
-            Console.WriteLine($"Замовлень: {t.Items}, сума: {t.Total:F2} грн, середній чек: {t.Average:F2} грн, максимум: {t.Max:F2} грн");
+            Console.WriteLine($"Замовлень: {t.Items}, сума: {t.Total:F2} {settings.Options.Orders.Currency}, середній чек: {t.Average:F2} {settings.Options.Orders.Currency}, максимум: {t.Max:F2} {settings.Options.Orders.Currency}");
             break;
         case "demo-deferred":
             var demo = ReportService.DemonstrateDeferredExecution(items);
@@ -107,7 +131,7 @@ static async Task RunAsync(string[] args)
             Console.WriteLine($"У запиті після очищення джерела: {demo.AfterClear}");
             break;
         default:
-            Console.WriteLine("import-lines [path] [--stream] [--progress] [--cancel-after-ms N] [--file] | report-top | report-expensive | report-groups | report-sum | demo-deferred | report-customers | report-top-orders | report-groups-query | benchmark-reports");
+            Console.WriteLine("config | export [--file] | import [path] | import-lines [path] [--stream] [--progress] [--cancel-after-ms N] [--file] | report-top | report-expensive | report-groups | report-sum | demo-deferred | report-customers | report-top-orders | report-groups-query | benchmark-reports");
             Environment.ExitCode = 1;
             break;
     }
@@ -119,7 +143,8 @@ static async Task ImportLinesAsync(OrderService service, string[] args)
     var commandIndex = Array.IndexOf(args, "import-lines");
     var path = commandIndex + 1 < args.Length && !args[commandIndex + 1].StartsWith("--")
         ? args[commandIndex + 1]
-        : Path.Combine("data", "order-lines.json");
+        : Path.Combine(AppContext.BaseDirectory, "samples", "order-lines.json");
+    path = Path.GetFullPath(path);
     using var userCts = new CancellationTokenSource();
     using var timeoutCts = new CancellationTokenSource();
     var timeoutIndex = Array.IndexOf(args, "--cancel-after-ms");

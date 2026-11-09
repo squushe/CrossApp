@@ -300,3 +300,63 @@ dotnet test --collect:"XPlat Code Coverage"
 При скасуванні таймаутом виводиться `Джерело скасування: таймаут.`, потім `Імпорт скасовано.`. Ctrl+C виводить джерело `Ctrl+C`. Для демонстрації додатного таймауту на великому файлі використовуйте `--cancel-after-ms 2000`.
 
 **Поведінка потокового режиму:** помилка у другому чи наступному записі зберігає попередні успішні додавання та події. На відміну від звичайного режиму, він не виконує попередню перевірку всього файлу. `data/order-lines-invalid.json --stream` демонструє саме цей сценарій.
+
+
+## Шляхи, JSON, конфігурація та Secrets (Лабораторна 9)
+
+Додано конфігурацію з `appsettings.json`, профілі Development/Production та
+імпорт/експорт усієї колекції замовлень із рядками і статусами.
+JSON записується атомарно через `.tmp` + `File.Move`, кирилиця читабельна.
+Відносні шляхи сховища відлічуються від `AppContext.BaseDirectory`.
+
+### Запуск
+
+```sh
+dotnet run --project src/Cli -f net10.0 -- config
+dotnet run --project src/Cli -f net10.0 -- export
+dotnet run --project src/Cli -f net10.0 -- import
+dotnet run --project src/Cli -f net10.0 -- report-sum --file
+dotnet test
+python3 lab09/verify_cli.py
+```
+
+`export` без `--file` зберігає 18 демонстраційних замовлень.
+`import [path]` замінює файлову колекцію; без path читає налаштований файл.
+Для звітів зі збережених даних використовуй `--file`.
+
+### Налаштування
+
+| Ключ | Типове значення | Змінна середовища |
+|---|---|---|
+| Storage:DataPath | data | CROSSAPP_Storage__DataPath |
+| Storage:FileName | orders.json | CROSSAPP_Storage__FileName |
+| Logging:MinimumLevel | Debug у Development, Warning у Production | CROSSAPP_Logging__MinimumLevel |
+| EnvironmentName | Development | CROSSAPP_ENVIRONMENT вибирає профіль |
+| Orders:Currency | UAH | CROSSAPP_Orders__Currency |
+| Integration:ApiKey | не задано | CROSSAPP_Integration__ApiKey |
+
+Production використовує каталог `data-production`.
+Пріоритет: базовий JSON → JSON профілю → user-secrets → env → `--Section:Key=value`.
+Окрема `CROSSAPP_DATA_PATH` перекриває всі налаштування шляху.
+`Orders:Currency` змінює позначення валюти без конвертації сум.
+
+```sh
+# Bash / zsh
+CROSSAPP_DATA_PATH=demo-lab09 dotnet run --project src/Cli -f net10.0 -- export
+CROSSAPP_ENVIRONMENT=Production dotnet run --project src/Cli -f net10.0 -- config
+```
+
+```powershell
+# PowerShell
+$env:CROSSAPP_DATA_PATH = "demo-lab09"
+dotnet run --project src/Cli -f net10.0 -- export
+Remove-Item Env:CROSSAPP_DATA_PATH
+```
+
+Секрет задається через середовище або локально через user-secrets:
+
+```sh
+dotnet user-secrets set "Integration:ApiKey" "test-key" --project src/Cli
+```
+
+У Git зберігається лише `UserSecretsId`; значення секрету не друкується.

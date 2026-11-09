@@ -480,3 +480,13 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local lab defense materials
+/lab07/
+/lab08/
+/lab09/
+
+# Lab 09: runtime data and local secrets
+/data/
+**/secrets.json
+**/appsettings.Local.json
