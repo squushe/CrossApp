@@ -7,8 +7,14 @@ Content-Type: application/json
 
 {"customer":"C-001","lines":[{"productId":"P-001","name":"Кабель USB-C","price":125.50,"quantity":2}]}
 
-### Список
-GET {{host}}/api/orders
+### Список з пагінацією: { items, total }
+GET {{host}}/api/orders?page=1&pageSize=20
+
+### Пошук за клієнтом, ID або товаром
+GET {{host}}/api/orders?page=1&pageSize=5&search=C-001
+
+### 400: некоректна пагінація
+GET {{host}}/api/orders?page=0&pageSize=101
 
 ### За ID
 GET {{host}}/api/orders/{{id}}

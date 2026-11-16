@@ -2,6 +2,8 @@
 import copy
 import json
 import sys
+import uuid
+import urllib.parse
 import urllib.error
 import urllib.request
 
@@ -28,7 +30,8 @@ def request(method, path, expected, body=None, raw=None):
         return result, response.headers
 
 
-body = {"customer": "C-001", "lines": [
+unique_customer = "verify-" + uuid.uuid4().hex
+body = {"customer": unique_customer, "lines": [
     {"productId": "P-001", "name": "Кабель", "price": 125.5, "quantity": 2}]}
 created, headers = request("POST", "/api/orders", 201, body)
 location = headers["Location"]
@@ -36,7 +39,14 @@ try:
     found, _ = request("GET", location, 200)
     assert found == created and found["total"] == 251
     rows, _ = request("GET", "/api/orders", 200)
-    assert any(row["id"] == created["id"] for row in rows)
+    assert isinstance(rows["items"], list) and rows["total"] >= 1
+    search_path = "/api/orders?page=1&pageSize=1&search=" + urllib.parse.quote(unique_customer)
+    page, _ = request("GET", search_path, 200)
+    assert page["total"] == 1 and page["items"][0]["id"] == created["id"]
+    beyond, _ = request("GET", search_path.replace("page=1&", "page=2&"), 200)
+    assert beyond["total"] == 1 and beyond["items"] == []
+    invalid_page, _ = request("GET", "/api/orders?page=0&pageSize=101", 400)
+    assert set(invalid_page["errors"]) == {"page", "pageSize"}
     total, _ = request("GET", location + "/total", 200)
     assert total["total"] == 251
     changed = copy.deepcopy(body)
@@ -60,4 +70,4 @@ finally:
     request("DELETE", location, 204)
 request("GET", location, 404)
 request("DELETE", location, 404)
-print("CRUD та перевірки помилок пройдено.")
+print("CRUD, пагінація, пошук та перевірки помилок пройдено.")

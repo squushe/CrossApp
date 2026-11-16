@@ -382,10 +382,10 @@ ASPNETCORE_ENVIRONMENT=Production dotnet run --project src/Api --no-launch-profi
 
 | Метод | Маршрут | Відповіді |
 |---|---|---|
-| GET | `/api/orders` | 200, масив замовлень |
+| GET | `/api/orders?page=1&pageSize=20&search=...` | 200, `{items,total}` / 400 |
 | GET | `/api/orders/{id}` | 200 / 404 |
-| POST | `/api/orders` | 201 + Location / 400 |
-| PUT | `/api/orders/{id}` | 200 / 400 / 404 |
+| POST | `/api/orders` | 201 + Location / 400 / 409 |
+| PUT | `/api/orders/{id}` | 200 / 400 / 404 / 409 |
 | DELETE | `/api/orders/{id}` | 204 / 404 |
 | GET | `/api/orders/{id}/total` | 200, `{id,total}` / 404 |
 
@@ -432,5 +432,34 @@ curl -i "http://localhost:5080/api/orders/$id" # 404
 Готові запити: `src/Api/Api.http`. Автоматична HTTP-перевірка запущеного API:
 
 ```sh
+python3 src/Api/verify_api.py
+```
+
+
+### Додаткові завдання (Лабораторна 10)
+
+1. **Пагінація й пошук:** `GET /api/orders?page=1&pageSize=20&search=...`
+   повертає `{ "items": [...], "total": 42 }`. `total` — кількість збігів до
+   пагінації; `page >= 1`, `pageSize` від 1 до 100, `search` до 200 символів.
+   Пошук без урахування регістру за ID замовлення, клієнтом, ID та назвою товару.
+   Сортування за часом створення, потім ID; сторінка за межами списку порожня.
+   Формат списку змінено з масиву на об'єкт; `verify_api.py` оновлено.
+2. **FluentValidation:** правила у `Validation/SaveOrderRequestValidator.cs`.
+   Фільтр `ValidationFilter<SaveOrderRequest>` підключено через `AddEndpointFilter`
+   до POST і PUT. Валідатор реєструється як Scoped; помилки повертаються як
+   400 `ValidationProblemDetails` з ключами полів у camelCase.
+3. **Доменні конфлікти:** окремий `DomainExceptionHandler : IExceptionHandler`
+   перетворює `DomainException` на 409 `ProblemDetails`. `ApiExceptionHandler`
+   обробляє некоректне тіло як 400, решту винятків як 500 без внутрішніх деталей.
+   Обробник 409 перевіряється через підміну сховища у тесті; спеціальних
+   маршрутів для створення штучної помилки в API немає.
+4. **Інтеграційні тести:** `tests/Api.Tests`, `WebApplicationFactory<Program>`.
+   Перевіряють POST 201 та GET за Location 200, повний CRUD, пагінацію,
+   пошук, фільтр валідації, відповіді 409/500 без деталей, доступність
+   OpenAPI/Scalar лише в Development. Сервер запускається самим тестом.
+
+```sh
+dotnet test tests/Api.Tests/Api.Tests.csproj
+curl 'http://localhost:5080/api/orders?page=1&pageSize=5&search=C-001'
 python3 src/Api/verify_api.py
 ```
