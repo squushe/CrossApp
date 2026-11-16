@@ -11,5 +11,6 @@ public record OrderDto(
     string Id,
     string CustomerId,
     List<OrderLineDto> Lines,
-    string Status
+    string Status,
+    DateTimeOffset? CreatedAt = null
 ) : DomainRecord;

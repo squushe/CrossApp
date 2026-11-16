@@ -21,6 +21,7 @@ public sealed class JsonStorageTests : IDisposable
         Assert.Equal(2, restored.Count);
         Assert.Equal(confirmed.Id, restored[0].Id);
         Assert.Equal(confirmed.CustomerId, restored[0].CustomerId);
+        Assert.Equal(confirmed.CreatedAt, restored[0].CreatedAt);
         Assert.Equal(confirmed.Status, restored[0].Status);
         Assert.Equal(confirmed.Lines.Select(l => l.ToDto()), restored[0].Lines.Select(l => l.ToDto()));
         Assert.Equal(46m, restored[0].Total);

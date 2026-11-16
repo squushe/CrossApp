@@ -1,0 +1,54 @@
+@host = http://localhost:5080
+@id = replace-with-id-from-create
+
+### Створити; скопіюй id із відповіді в @id
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{"customer":"C-001","lines":[{"productId":"P-001","name":"Кабель USB-C","price":125.50,"quantity":2}]}
+
+### Список
+GET {{host}}/api/orders
+
+### За ID
+GET {{host}}/api/orders/{{id}}
+
+### Сума: 251.00
+GET {{host}}/api/orders/{{id}}/total
+
+### Замінити
+PUT {{host}}/api/orders/{{id}}
+Content-Type: application/json
+
+{"customer":"C-002","lines":[{"productId":"P-002","name":"Миша","price":300,"quantity":3}]}
+
+### 400: помилки полів
+PUT {{host}}/api/orders/{{id}}
+Content-Type: application/json
+
+{"customer":"","lines":[{"productId":"","name":"","price":-1,"quantity":0}]}
+
+### 400: порожній масив
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{"customer":"C-001","lines":[]}
+
+### 400: неправильний тип
+POST {{host}}/api/orders
+Content-Type: application/json
+
+{"customer":"C-001","lines":[{"productId":"P-1","name":"X","price":1,"quantity":"abc"}]}
+
+### 400: порожнє тіло
+POST {{host}}/api/orders
+Content-Type: application/json
+
+### Видалити: 204
+DELETE {{host}}/api/orders/{{id}}
+
+### Після видалення: 404
+GET {{host}}/api/orders/{{id}}
+
+### OpenAPI (Development)
+GET {{host}}/openapi/v1.json

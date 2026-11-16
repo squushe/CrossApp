@@ -15,6 +15,7 @@ public sealed class Order
 
     public string Id { get; }
     public string CustomerId { get; }
+    public DateTimeOffset CreatedAt { get; private set; } = DateTimeOffset.UtcNow;
     public IReadOnlyList<OrderLine> Lines => _lines.AsReadOnly();
     
     public OrderStatus Status { get; private set; }
@@ -74,11 +75,12 @@ public sealed class Order
     }
 
     public OrderDto ToDto() => 
-        new(Id, CustomerId, _lines.Select(l => l.ToDto()).ToList(), Status.ToString());
+        new(Id, CustomerId, _lines.Select(l => l.ToDto()).ToList(), Status.ToString(), CreatedAt);
 
     public static Order FromDto(OrderDto dto)
     {
         var order = Create(dto.Id, dto.CustomerId);
+        if (dto.CreatedAt is { } createdAt) order.CreatedAt = createdAt;
         
         foreach (var lineDto in dto.Lines)
         {

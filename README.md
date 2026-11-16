@@ -28,7 +28,7 @@ dotnet build
 
 dotnet run --project src/Cli -f net10.0
 
-Поточний етап проєкту — лабораторна 8: асинхронний імпорт рядків замовлень, скасування, доменні винятки й unit-тести Core. Без аргументів програма показує топ-5 клієнтів за сумою замовлень.
+Поточний етап проєкту — лабораторна 10: HTTP API замовлень із CRUD, валідацією та OpenAPI/Scalar. Без аргументів програма показує топ-5 клієнтів за сумою замовлень.
 
 ## Publish
 ### Self-contained
@@ -360,3 +360,77 @@ dotnet user-secrets set "Integration:ApiKey" "test-key" --project src/Cli
 ```
 
 У Git зберігається лише `UserSecretsId`; значення секрету не друкується.
+
+
+## Minimal API замовлень (Лабораторна 10)
+
+```sh
+dotnet restore
+dotnet build
+dotnet test
+dotnet run --project src/Api --launch-profile http
+```
+
+Адреса: http://localhost:5080. У Development доступні
+[Scalar](http://localhost:5080/scalar/v1) та
+[OpenAPI](http://localhost:5080/openapi/v1.json).
+У Production обидва маршрути вимкнені:
+
+```sh
+ASPNETCORE_ENVIRONMENT=Production dotnet run --project src/Api --no-launch-profile --urls http://localhost:5080
+```
+
+| Метод | Маршрут | Відповіді |
+|---|---|---|
+| GET | `/api/orders` | 200, масив замовлень |
+| GET | `/api/orders/{id}` | 200 / 404 |
+| POST | `/api/orders` | 201 + Location / 400 |
+| PUT | `/api/orders/{id}` | 200 / 400 / 404 |
+| DELETE | `/api/orders/{id}` | 204 / 404 |
+| GET | `/api/orders/{id}/total` | 200, `{id,total}` / 404 |
+
+Вхід: `customer` (ID клієнта, до 100 символів), `lines` (1–1000 рядків).
+Рядок містить `productId` (до 100), `name` (до 200), `price > 0`, `quantity > 0`.
+Усі рядкові поля обов'язкові; сума має поміщатися в `decimal`.
+Вихід додатково містить `id`, `createdAt`, `status`, `total`.
+`createdAt` задає сервер у UTC; PUT замінює клієнта та всі рядки, зберігаючи ID,
+час створення й статус. Валідація повертає 400 `ValidationProblemDetails` з
+ключами `customer`, `lines[0].name` тощо; нерозбірливий JSON або порожнє тіло —
+400 `ProblemDetails`. Неочікувані помилки — 500 без деталей винятку.
+
+DTO в `src/Api/Contracts` відокремлюють HTTP-контракт від сутностей Core.
+`IAsyncOrderStore` отримується параметром обробника через DI; усі операції
+викликаються через `await` із `CancellationToken` запиту. Сховище
+`AsyncInMemoryOrderStore` зареєстроване як Singleton: використовує `lock`,
+повертає копії та атомарно замінює записи. Операції в пам'яті завершуються
+синхронно без `Task.Run`; контракт готовий до асинхронного EF-сховища.
+Після перезапуску API дані зникають; CLI використовує свої попередні сховища.
+
+### Перевірка через curl
+
+```sh
+curl -i -X POST http://localhost:5080/api/orders \
+  -H 'Content-Type: application/json' \
+  -d '{"customer":"C-001","lines":[{"productId":"P-001","name":"Кабель","price":125.50,"quantity":2}]}'
+
+# Скопіюй id із відповіді POST:
+id=ВСТАВ_ID
+curl -i "http://localhost:5080/api/orders/$id"
+curl -i "http://localhost:5080/api/orders/$id/total"
+curl -i -X PUT "http://localhost:5080/api/orders/$id" \
+  -H 'Content-Type: application/json' \
+  -d '{"customer":"C-002","lines":[{"productId":"P-002","name":"Миша","price":300,"quantity":3}]}'
+
+# 400 з переліком помилок:
+curl -i -X POST http://localhost:5080/api/orders \
+  -H 'Content-Type: application/json' -d '{"customer":"","lines":[]}'
+
+curl -i -X DELETE "http://localhost:5080/api/orders/$id"
+curl -i "http://localhost:5080/api/orders/$id" # 404
+```
+
+Готові запити: `src/Api/Api.http`. Автоматична HTTP-перевірка запущеного API:
+
+```sh
+python3 src/Api/verify_api.py
+```
